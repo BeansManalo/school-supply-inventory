@@ -3,7 +3,7 @@
 class StockMovement {
     public function __construct(
         public int $id,
-        public int $productId,
+        public string $productId,
         public string $type,
         public int $quantity,
         public string $note,

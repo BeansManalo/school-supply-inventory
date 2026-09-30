@@ -2,7 +2,7 @@
 /** A school supply item. Quantity only changes through Inventory::recordMovement(). */
 class Product {
     public function __construct(
-        public int $id,
+        public string $id,
         public string $name,
         public string $category,
         public int $reorderLevel = 0,
