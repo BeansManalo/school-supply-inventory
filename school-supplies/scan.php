@@ -1,13 +1,11 @@
 <?php
 require __DIR__ . '/includes/bootstrap.php';
 
-// Product QR reader. The dashboard posts the text it decoded and gets a JSON preview back (or a 422 with the reason).
-// The verify popup then posts that text again with the fields the user filled in (apply) and lands back on the dashboard.
+// QR reader. The dashboard posts the text it decoded and gets a JSON preview of every product in it back (or a 422 with the reason).
+// The verify popup then posts that text again with the fields the user filled in (apply, as item[position][field]) and lands back on the dashboard.
 if (isset($_POST['apply'])) {
     try {
-        redirect('index.php', $inventory->applyScan(
-            $_POST['text'] ?? '', $_POST['stock'] ?? '', $_POST['category'] ?? '', $_POST['reorder_level'] ?? '', $_POST['choice'] ?? ''
-        ));
+        redirect('index.php', $inventory->applyScan($_POST['text'] ?? '', (array) ($_POST['item'] ?? [])));
     } catch (ValidationException $e) {
         redirect('index.php', $e->getMessage(), 'error');
     }

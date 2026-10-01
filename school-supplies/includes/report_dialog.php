@@ -4,7 +4,7 @@ $products = $inventory->products();
 $categories = array_unique(array_filter(array_column($products, 'category')));
 sort($categories);
 $hasNone = in_array('', array_column($products, 'category'), true);
-$papers = require __DIR__ . '/paper_sizes.php';
+['sizes' => $sizes, 'units' => $units, 'limits' => $limits] = require __DIR__ . '/paper_sizes.php';
 ?>
 <dialog id="report-dialog" class="form">
     <h2>Create report</h2>
@@ -26,9 +26,34 @@ $papers = require __DIR__ . '/paper_sizes.php';
         </label>
         <label>Paper size <span class="hint">(match the paper you will print on)</span>
             <select name="paper">
-                <?php foreach ($papers as $key => [$label]): ?>
-                    <option value="<?= $key ?>"><?= e($label) ?></option>
+                <?php foreach ($sizes as $group => $papers): ?>
+                    <optgroup label="<?= e($group) ?>">
+                        <?php foreach ($papers as $key => [$label]): ?>
+                            <option value="<?= $key ?>"><?= e($label) ?></option>
+                        <?php endforeach; ?>
+                    </optgroup>
                 <?php endforeach; ?>
+                <option value="custom">Custom size…</option>
+            </select>
+        </label>
+        <div data-custom data-limits="<?= e(json_encode($limits)) ?>" hidden>
+            <div class="row3">
+                <label>Width <input type="number" name="w" step="any" required></label>
+                <label>Height <input type="number" name="h" step="any" required></label>
+                <label>Unit
+                    <select name="unit">
+                        <?php foreach ($units as $unit => $mm): ?>
+                            <option value="<?= $unit ?>" data-mm="<?= $mm ?>"><?= $unit ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </label>
+            </div>
+            <p class="hint"></p>
+        </div>
+        <label>Orientation
+            <select name="orient">
+                <option value="portrait">Portrait (vertical)</option>
+                <option value="landscape">Landscape (horizontal)</option>
             </select>
         </label>
         <details>
@@ -67,11 +92,13 @@ $papers = require __DIR__ . '/paper_sizes.php';
                     <label><input type="checkbox" name="cat[]" value=""> No category</label>
                 <?php endif; ?>
             </div>
-            <p class="hint">Products (none selected = all)</p>
-            <div class="checks wide">
+            <p class="hint" id="prod-hint">Products (none selected = all)</p>
+            <input type="search" id="prod-search" placeholder="Search products..." aria-label="Search products">
+            <div class="checks wide" id="prod-list">
                 <?php foreach ($products as $p): ?>
                     <label><input type="checkbox" name="prod[]" value="<?= e($p->id) ?>"> <?= e($p->name) ?> <span class="code"><?= e($p->id) ?></span></label>
                 <?php endforeach; ?>
+                <p class="hint" data-none hidden>No products match.</p>
             </div>
             <input type="hidden" name="notes" value="0">
             <label class="check"><input type="checkbox" name="notes" value="1" checked> Include notes</label>

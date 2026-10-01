@@ -6,6 +6,8 @@ $self = 'products.php' . ($grouped ? '?group=category' : '');   // keeps the gro
 
 $form = [];   // stock dialog values, kept if validation fails
 $stockError = null;
+$add = [];    // add dialog values, kept if validation fails
+$addError = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['delete_id'])) {
@@ -13,6 +15,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect($self, 'Product deleted.');
     }
     try {
+        if (isset($_POST['add'])) {   // the add dialog
+            $add = $_POST;
+            $inventory->saveProduct(true, $_POST['id'] ?? '', $_POST['name'] ?? '', $_POST['category'] ?? '', $_POST['reorder_level'] ?? '');
+            redirect($self, 'Product added.');
+        }
         if (isset($_POST['quantity'])) {   // the stock in/out dialog
             $form = $_POST;
             $inventory->recordMovement($_POST['product_id'] ?? '', $_POST['type'] ?? '', $_POST['quantity'], $_POST['note'] ?? '');
@@ -21,7 +28,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $inventory->saveProduct(false, $_POST['product_id'] ?? '', $_POST['name'] ?? '', $_POST['category'] ?? '', $_POST['reorder_level'] ?? '');
         redirect($self, 'Product updated.');
     } catch (ValidationException $e) {
-        if (isset($_POST['quantity'])) {
+        if (isset($_POST['add'])) {
+            $addError = $e->getMessage();
+        } elseif (isset($_POST['quantity'])) {
             $stockError = $e->getMessage();
         } else {
             $error = $e->getMessage();
@@ -30,6 +39,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $products = $inventory->products();
+$categories = array_unique(array_filter(array_column($products, 'category')));
+sort($categories, SORT_FLAG_CASE | SORT_STRING);
 $groups = ['' => $products];
 if ($grouped) {
     $groups = [];
@@ -44,16 +55,40 @@ $title = 'Products';
 include __DIR__ . '/includes/header.php';
 ?>
 <div class="toolbar">
-    <input type="search" placeholder="Search products..." data-filter="products">
-    <form>
-        <label class="check">
-            <input type="checkbox" name="group" value="category" onchange="this.form.submit()" <?= $grouped ? 'checked' : '' ?>>
-            Group by category
-        </label>
-    </form>
+    <div class="filters">
+        <input type="search" placeholder="Search products..." data-filter="products">
+        <select data-view="category" aria-label="Category">
+            <option value="*">All categories</option>
+            <option value="">No category</option>
+            <?php foreach ($categories as $c): ?>
+                <option value="<?= e($c) ?>"><?= e($c) ?></option>
+            <?php endforeach; ?>
+        </select>
+        <select data-view="status" aria-label="Status">
+            <option value="*">Any status</option>
+            <option value="out">Out of stock</option>
+            <option value="low">Low</option>
+            <option value="ok">OK</option>
+        </select>
+        <select data-view="sort" aria-label="Sort by">
+            <option value="">Sort: order added</option>
+            <option value="name">Name A-Z</option>
+            <option value="name_desc">Name Z-A</option>
+            <option value="stock">Stock: low to high</option>
+            <option value="stock_desc">Stock: high to low</option>
+            <option value="category">Category A-Z</option>
+            <option value="id">Product ID</option>
+        </select>
+        <form>
+            <label class="check">
+                <input type="checkbox" name="group" value="category" onchange="this.form.submit()" <?= $grouped ? 'checked' : '' ?>>
+                Group by category
+            </label>
+        </form>
+    </div>
     <div class="actions">
         <button type="button" class="btn btn-secondary" id="open-stock">Stock in/out</button>
-        <a class="btn" href="product_form.php">+ Add product</a>
+        <button type="button" class="btn" id="open-add">+ Add product</button>
     </div>
 </div>
 
@@ -63,6 +98,9 @@ include __DIR__ . '/includes/header.php';
 
 <?php $editable = true; ?>
 <div id="products">
+    <?php if ($products): ?>
+        <p class="empty" data-none hidden>No products match.</p>
+    <?php endif; ?>
     <?php foreach ($groups as $category => $items): ?>
         <section class="group">
             <?php if ($grouped): ?>
@@ -78,11 +116,12 @@ include __DIR__ . '/includes/header.php';
 </div>
 
 <datalist id="categories">
-    <?php foreach (array_unique(array_filter(array_column($products, 'category'))) as $c): ?>
+    <?php foreach ($categories as $c): ?>
         <option value="<?= e($c) ?>">
     <?php endforeach; ?>
 </datalist>
 
+<?php include __DIR__ . '/includes/add_dialog.php'; ?>
 <dialog id="product-dialog" class="form">
     <h2>Edit product</h2>
     <form method="post">
@@ -132,7 +171,7 @@ include __DIR__ . '/includes/header.php';
             <input type="number" name="quantity" min="1" value="<?= e($form['quantity'] ?? '') ?>" required>
         </label>
         <label>Note <span class="hint">(optional)</span>
-            <input type="text" name="note" value="<?= e($form['note'] ?? '') ?>">
+            <input type="text" name="note" maxlength="500" value="<?= e($form['note'] ?? '') ?>">
         </label>
         <div class="actions">
             <button class="btn">Record</button>

@@ -1,15 +1,40 @@
-// Live filter: <input data-filter="containerId"> hides product packages (and empty category groups) that don't match what's typed.
+// Live filter: <input data-filter="containerId"> shows only the product packages that match what's typed and the page's
+// <select data-view="category|status|sort"> choices ('*' = all), sorts what is left (inside each category group when grouped),
+// and hides empty category groups. Packs carry what they are sorted and filtered on as data-* attributes (see pack.php).
 document.querySelectorAll('[data-filter]').forEach(input => {
-    input.addEventListener('input', () => {
-        const box = document.getElementById(input.dataset.filter);
+    const box = document.getElementById(input.dataset.filter);
+    const views = document.querySelectorAll('[data-view]');
+    const packs = [...box.querySelectorAll('.pack')];
+    const added = new Map(packs.map((pack, i) => [pack, i]));   // the order they came in: "order added", and the tie-break for every sort
+    const text = (a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+    const byName = (a, b) => text(a.name, b.name);
+    const sorts = {
+        name: byName,
+        name_desc: (a, b) => byName(b, a),
+        stock: (a, b) => a.stock - b.stock,
+        stock_desc: (a, b) => b.stock - a.stock,
+        category: (a, b) => (a.category === '') - (b.category === '') || text(a.category, b.category) || byName(a, b),   // no category last
+        id: (a, b) => text(a.id, b.id),
+    };
+
+    const apply = () => {
+        const view = Object.fromEntries([...views].map(v => [v.dataset.view, v.value]));
         const query = input.value.toLowerCase();
-        box.querySelectorAll('.pack').forEach(pack => {
-            pack.hidden = !pack.textContent.toLowerCase().includes(query);
+        const only = (key, value) => (view[key] ?? '*') === '*' || view[key] === value;
+        packs.forEach(pack => {
+            pack.hidden = !(pack.textContent.toLowerCase().includes(query) && only('category', pack.dataset.category) && only('status', pack.dataset.status));
+        });
+        box.querySelectorAll('.packs').forEach(list => {
+            [...list.children].sort((a, b) => sorts[view.sort]?.(a.dataset, b.dataset) || added.get(a) - added.get(b)).forEach(pack => list.append(pack));
         });
         box.querySelectorAll('.group').forEach(group => {
             group.hidden = !group.querySelector('.pack:not([hidden])');
         });
-    });
+        const none = box.querySelector('[data-none]');
+        if (none) none.hidden = packs.some(pack => !pack.hidden);
+    };
+    input.addEventListener('input', apply);
+    views.forEach(v => v.addEventListener('change', apply));
 });
 
 // Edit popup: <button data-edit> inside a .pack fills the dialog from the pack's data-* attributes.
@@ -44,33 +69,78 @@ document.querySelectorAll('.day-tabs').forEach(tabs => {
     });
 });
 
-// Stock in/out popup: opens from its toolbar button, or on load when the server asks (data-open).
+// Stock in/out and Add product popups: open from their buttons, or on load when the server asks (data-open).
 document.getElementById('open-stock')?.addEventListener('click', () => document.getElementById('stock-dialog').showModal());
+document.getElementById('open-add')?.addEventListener('click', () => document.getElementById('add-dialog').showModal());
 document.querySelectorAll('dialog[data-open]').forEach(d => d.showModal());
 
-// Manager popup (sidebar button on every page).
-document.getElementById('open-manager').addEventListener('click', () => document.getElementById('manager-dialog').showModal());
+// Manager popup (sidebar button on every page, super admin only).
+document.getElementById('open-manager')?.addEventListener('click', () => document.getElementById('manager-dialog').showModal());
 
-// QR popup (dashboard only, where the QR library is loaded): qr.php signs the fields, then the code is drawn and offered as a PNG.
+// QR popup (dashboard only, where the QR library is loaded): the products added so far go to qr.php, which returns them
+// compressed and encrypted as text; the code is drawn and offered as a PNG.
 const qrDialog = document.getElementById('qr-dialog');
 document.getElementById('open-qr')?.addEventListener('click', () => qrDialog.showModal());
 if (qrDialog) {
-    qrcode.stringToBytes = qrcode.stringToBytesFuncs['UTF-8'];   // names may hold non-ASCII text
     const form = qrDialog.querySelector('form');
     const result = qrDialog.querySelector('.qr-result');
     const canvas = result.querySelector('canvas');
+    const box = form.querySelector('.qr-list-box');
+    const inputs = ['id', 'name', 'category', 'stock'].map(n => form.elements[n]);
+    const item = document.getElementById('qr-item');
+    const records = [];   // [code, name, category, stock] per product added; kept when the popup closes, so an accidental Esc loses nothing
     const show = done => { form.hidden = done; result.hidden = !done; };
+
+    const render = () => {
+        box.querySelector('.qr-list').replaceChildren(...records.map((r, i) => {
+            const li = item.content.firstElementChild.cloneNode(true);
+            const [name, code, more] = li.querySelectorAll('strong, .code, .more');
+            [code.textContent, name.textContent] = r;
+            more.textContent = [r[2], r[3] && `+${r[3]} stock`].filter(Boolean).map(s => ' · ' + s).join('');
+            li.lastElementChild.onclick = () => { records.splice(i, 1); render(); };
+            return li;
+        }));
+        box.querySelector('[data-clear]').hidden = !records.length;
+        box.querySelector('[data-count]').textContent = `Queue (${records.length})`;
+    };
+    box.querySelector('[data-clear]').onclick = () => { records.length = 0; render(); };
+    render();
 
     form.addEventListener('submit', async event => {
         if (event.submitter?.formMethod === 'dialog') return;   // Cancel
         event.preventDefault();
-        const response = await fetch('qr.php', { method: 'POST', body: new FormData(form) });
+        const fields = inputs.map(i => i.value.trim());
+        const single = form.elements.mode.value === 'single';
+        let list = records;
+        if (single) {   // the typed product alone; the queue is left as it is
+            if (!form.reportValidity()) return;
+            list = [fields];
+        } else if (fields.some(Boolean) || event.submitter?.value === 'add') {   // a product is typed in: both buttons add it, so Create QR code never leaves it out
+            if (!form.reportValidity()) return;
+            if (records.some(r => r[0] === fields[0] || r[1].toLowerCase() === fields[1].toLowerCase())) return alert('This code or name is already in the queue.');
+            records.push(fields);
+            inputs.forEach(i => i.value = '');
+            render();
+            inputs[0].focus();
+        }
+        if (!single && event.submitter?.value !== 'make') return;
+        if (!list.length) return alert('Add at least one product first.');
+
+        const response = await fetch('qr.php', { method: 'POST', body: new URLSearchParams({ records: JSON.stringify(list) }) });
         const text = await response.text();
         if (!response.ok) return alert(text);
 
-        const qr = qrcode(0, 'M');
-        qr.addData(text);
-        qr.make();
+        let qr;
+        for (const level of ['M', 'L']) {   // M reads more reliably; L only when the products don't fit in M
+            try {
+                qr = qrcode(0, level);
+                qr.addData(text, 'Alphanumeric');
+                qr.make();
+                break;
+            } catch { qr = null; }
+        }
+        if (!qr) return alert(`Too many products for one QR code (${list.length}). Remove some and make a second code for them.`);
+
         const cell = 10, quiet = 4 * cell, size = qr.getModuleCount() * cell + 2 * quiet;
         canvas.width = canvas.height = size;
         const ctx = canvas.getContext('2d');
@@ -80,19 +150,19 @@ if (qrDialog) {
         qr.renderTo2dContext(ctx, cell);
         ctx.setTransform(1, 0, 0, 1, 0, 0);
 
-        const { id, name } = form.elements;
-        result.querySelector('.hint').textContent = `${id.value.trim()} - ${name.value.trim()}`;
+        const one = list.length === 1;
+        result.querySelector('.hint').textContent = one ? `${list[0][0]} - ${list[0][1]}` : `${list.length} products`;
         const save = result.querySelector('a');
         save.href = canvas.toDataURL('image/png');
-        save.download = `qr-${id.value.trim()}.png`;
+        save.download = `qr-${one ? list[0][0] : list.length + '-products'}.png`;
         show(true);
     });
     result.querySelector('[data-back]').addEventListener('click', () => show(false));
-    qrDialog.addEventListener('close', () => { show(false); form.reset(); });
+    qrDialog.addEventListener('close', () => { show(false); inputs.forEach(i => i.value = ''); });   // the mode and the queue stay
 }
 
-// Scan popup (dashboard only, where jsQR is loaded): reads a QR code from the camera or an image, scan.php checks it,
-// and the popup shows what was read so it can be verified before its stock is added.
+// Scan popup (dashboard only, where ZXing is loaded): reads a QR code from the camera or a picture, scan.php checks it,
+// and the popup lists every product in it so they can be verified before any stock is added.
 const scanDialog = document.getElementById('scan-dialog');
 document.getElementById('open-scan')?.addEventListener('click', () => scanDialog.showModal());
 if (scanDialog) {
@@ -101,59 +171,76 @@ if (scanDialog) {
     const video = source.querySelector('video');
     const file = source.querySelector('input[type=file]');
     const verify = scanDialog.querySelector('[data-verify]');
-    const conflict = verify.querySelector('[data-conflict]');
+    const items = verify.querySelector('[data-items]');
+    const item = document.getElementById('scan-item');
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     const cat = c => c ? `“${c}”` : 'no category';
-    let stream, scan;
+    let stream;
+    ZXingWASM.setZXingModuleOverrides({ locateFile: (path, prefix) => path.endsWith('.wasm') ? `lib/zxing/${path}` : prefix + path });   // the .wasm is served from here, not a CDN
 
     const fail = message => { problem.textContent = message; problem.hidden = false; };
     const stopCamera = () => { stream?.getTracks().forEach(t => t.stop()); stream = null; video.hidden = true; };
 
-    // The text of the QR code in a picture, or undefined. Big pictures are shrunk to `max` pixels so reading stays quick.
-    const read = (picture, width, height, max) => {
-        const scale = Math.min(1, max / Math.max(width, height));
+    // The text of the QR code in a picture or video frame, or undefined. ZXing copes with the tilt, blur, screen moire and noise of a
+    // camera photo at full size; only a photo over 4096 px on its longest side is shrunk (a 50 MP one would need ~200 MB of pixels).
+    const read = async (picture, width, height) => {
+        const scale = Math.min(1, 4096 / Math.max(width, height));
         canvas.width = Math.round(width * scale);
         canvas.height = Math.round(height * scale);
         ctx.drawImage(picture, 0, 0, canvas.width, canvas.height);
-        const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        return jsQR(data, canvas.width, canvas.height, { inversionAttempts: 'dontInvert' })?.data;
+        const codes = await ZXingWASM.readBarcodes(ctx.getImageData(0, 0, canvas.width, canvas.height), { formats: ['QRCode'], maxNumberOfSymbols: 1 });
+        return codes.find(code => code.isValid)?.text;
     };
 
-    // Fills the verify step. Whatever the QR code holds is locked; the rest is for the user to fill in.
-    const show = (s, text) => {
-        scan = s;
-        verify.reset();
-        const isNew = s.state === 'new', critical = s.state === 'critical', isConflict = s.state === 'category';
-        const qr = 'from the QR code';
-        const set = (name, value, locked, hint) => {
-            const field = verify.elements[name];
-            field.value = value ?? '';
-            field.readOnly = locked;
-            field.labels[0].querySelector('.hint').textContent = `(${hint})`;
-        };
+    // Fills the verify step with one block per product. What the QR code holds is shown as text; only what it leaves out
+    // (and a new product's optional restock level) is a field. Fields are named item[position][field] for scan.php.
+    const show = (list, text) => {
         verify.elements.text.value = text;
-        set('id', s.id, true, qr);
-        set('name', s.name, true, qr);
-        set('category', s.category || (isNew ? '' : s.inventory.category), s.category !== '' || !isNew,
-            s.category ? qr : isNew ? 'not on the QR code; optional' : 'from the inventory');
-        set('stock', s.stock, s.stock !== null, s.stock === null ? 'not on the QR code' : qr);
-        verify.elements.reorder_level.disabled = verify.querySelector('[data-reorder]').hidden = !isNew;   // only a new product needs one
+        items.replaceChildren(...list.map((s, i) => {
+            const el = item.content.firstElementChild.cloneNode(true);
+            const q = selector => el.querySelector(selector);
+            const isNew = s.state === 'new', clash = s.state === 'category', critical = s.state === 'critical';
 
-        verify.querySelector('[data-status]').textContent = critical ? ''
-            : isNew ? 'New product: it will be added to the inventory.'
-            : `In the inventory now: ${s.inventory.quantity} in stock. The stock below will be added.`;
-        verify.querySelector('[data-critical]').hidden = !critical;
-        verify.querySelector('[data-problem]').textContent = s.problem;
-        verify.querySelector('[data-fields]').disabled = critical;
-        verify.querySelector('[data-accept]').hidden = critical;
-        conflict.hidden = conflict.disabled = !isConflict;
-        if (isConflict) {
-            const [keep, overwrite] = conflict.querySelectorAll('span');
-            conflict.querySelector('p').textContent = `The category on the QR code (${cat(s.category)}) is not the one in the inventory (${cat(s.inventory.category)}). What should happen?`;
-            keep.textContent = `Keep the inventory's category (${cat(s.inventory.category)}).`;
-            overwrite.textContent = `Overwrite it with the QR code's category (${cat(s.category)}).`;
-        }
+            q('[data-name]').textContent = s.name;
+            const tag = { new: ['New', 'ok'], category: ['Category differs', 'low'], critical: ['Problem', 'out'] }[s.state];
+            const badge = q('[data-badge]');
+            badge.hidden = !tag;
+            if (tag) {
+                badge.textContent = tag[0];
+                badge.classList.add(`st-${tag[1]}`);
+            }
+            q('[data-info]').textContent = [s.id, s.category, s.stock !== null && `+${s.stock} to add`, s.inventory && `${s.inventory.quantity} in stock now`]
+                .filter(Boolean).join(' · ');
+            q('[data-problem]').hidden = !critical;
+            q('[data-problem]').textContent = s.problem;
+            el.disabled = critical;   // a disabled fieldset submits nothing
+
+            const need = { stock: !critical && s.stock === null, category: isNew && !s.category, reorder: isNew };
+            el.querySelectorAll('[data-for]').forEach(label => {
+                const input = label.querySelector('input');
+                input.name = `item[${i}][${label.dataset.for}]`;
+                label.hidden = input.disabled = !need[label.dataset.for];
+            });
+
+            const conflict = q('[data-conflict]');
+            conflict.hidden = !clash;
+            conflict.querySelectorAll('input').forEach(radio => { radio.name = `item[${i}][choice]`; radio.disabled = !clash; });
+            if (clash) {
+                const [keep, overwrite] = conflict.querySelectorAll('span');
+                conflict.querySelector('p').textContent = `The category on the QR code (${cat(s.category)}) is not the one in the inventory (${cat(s.inventory.category)}). What should happen?`;
+                keep.textContent = `Keep the inventory's category (${cat(s.inventory.category)}).`;
+                overwrite.textContent = `Overwrite it with the QR code's category (${cat(s.category)}).`;
+            }
+            return el;
+        }));
+
+        const count = state => list.filter(s => s.state === state).length;
+        const skipped = count('critical');
+        verify.querySelector('[data-summary]').textContent = `${list.length} ${list.length === 1 ? 'product' : 'products'} in this code: `
+            + `${count('new')} new, ${count('match') + count('category')} already in the inventory${skipped ? `, ${skipped} skipped` : ''}.`;
+        verify.querySelector('[data-critical]').hidden = !skipped;
+        verify.querySelector('[data-accept]').hidden = skipped === list.length;
         source.hidden = true;
         verify.hidden = false;
     };
@@ -170,41 +257,53 @@ if (scanDialog) {
     source.querySelector('[data-camera]').addEventListener('click', async () => {
         problem.hidden = true;
         stopCamera();
+        if (!window.isSecureContext) {   // browsers hide the camera from plain http:// pages (localhost excepted), which is what a phone gets from a PC's address
+            return fail('Browsers only allow the live camera on https:// pages (or localhost), and this page is neither. Take a photo or choose an image instead, or open this site over https.');
+        }
         try {
-            stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-        } catch {   // no camera, permission refused, camera busy, or the page is not on localhost/https
-            return fail('Could not open the camera. Check that one is connected, that this site may use it and that no other app is using it, or scan an image instead.');
+            stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } } });
+        } catch {   // no camera, permission refused or camera busy
+            return fail('Could not open the camera. Check that one is connected, that this site may use it and that no other app is using it, or use a picture instead.');
         }
         video.srcObject = stream;
         video.hidden = false;
-        const tick = () => {
-            if (!stream) return;   // stopped: popup closed, image chosen, or a code was read
-            const text = video.videoWidth ? read(video, video.videoWidth, video.videoHeight, 800) : undefined;
-            text ? found(text) : requestAnimationFrame(tick);
+        video.play().catch(() => {});   // some phones ignore autoplay
+
+        const tick = async () => {
+            if (!stream) return;   // stopped: popup closed, picture chosen, or a code was read
+            const text = video.videoWidth ? await read(video, video.videoWidth, video.videoHeight) : undefined;
+            if (!stream) return;
+            text ? found(text) : setTimeout(tick, 100);
         };
         tick();
     });
 
-    source.querySelector('[data-image]').addEventListener('click', () => file.click());
+    // "Take photo" opens the phone's camera app straight away (capture); "Choose image" opens the picture chooser.
+    const pick = capture => {
+        capture ? file.setAttribute('capture', 'environment') : file.removeAttribute('capture');
+        file.click();
+    };
+    source.querySelector('[data-photo]').addEventListener('click', () => pick(true));
+    source.querySelector('[data-image]').addEventListener('click', () => pick(false));
     file.addEventListener('change', async () => {
+        if (!file.files[0]) return;   // the chooser was cancelled
         problem.hidden = true;
         stopCamera();
         const picture = await createImageBitmap(file.files[0]).catch(() => null);
         file.value = '';   // so picking the same file again still counts
         if (!picture) return fail('That file could not be read as an image.');
-        const text = read(picture, picture.width, picture.height, 1600);
-        text ? found(text) : fail('No QR code found in that image. Try a sharper, closer picture.');
+        const text = await read(picture, picture.width, picture.height);
+        picture.close();
+        text ? found(text) : fail('No QR code found in that picture. Move closer, hold still and fill the frame with the code.');
     });
 
-    conflict.addEventListener('change', event => {   // the category field shows what will be kept
-        verify.elements.category.value = event.target.value === 'keep' ? scan.inventory.category : scan.category;
-    });
     scanDialog.addEventListener('close', () => {
         stopCamera();
         problem.hidden = true;
         source.hidden = false;
         verify.hidden = true;
         verify.reset();
+        items.replaceChildren();
     });
 }
 
@@ -333,6 +432,41 @@ if (reportDialog) {
         view.hidden = false;
         draw();
     });
+
+    // Product search: hides the products whose name or code doesn't contain what's typed (same rule as the Products page).
+    // Ticked products stay ticked and are still included, so the hint counts them.
+    const prodSearch = form.querySelector('#prod-search');
+    const prodList = form.querySelector('#prod-list');
+    const prodRows = [...prodList.querySelectorAll('label')];
+    prodSearch.addEventListener('input', () => {
+        const query = prodSearch.value.toLowerCase();
+        prodRows.forEach(row => row.hidden = !row.textContent.toLowerCase().includes(query));
+        prodList.querySelector('[data-none]').hidden = prodRows.some(row => !row.hidden);
+    });
+    prodSearch.addEventListener('keydown', event => event.key === 'Enter' && event.preventDefault());   // Enter would otherwise submit the form
+    prodList.addEventListener('change', () => {
+        const n = prodList.querySelectorAll(':checked').length;
+        form.querySelector('#prod-hint').textContent = n ? `Products (${n} selected)` : 'Products (none selected = all)';
+    });
+
+    // Paper size: "Custom size" shows width, height and unit. Each side is held between the limits (in mm), which are shown in the chosen unit.
+    const paper = form.querySelector('[name=paper]');
+    const custom = form.querySelector('[data-custom]');
+    const unit = custom.querySelector('[name=unit]');
+    const limits = JSON.parse(custom.dataset.limits);
+    const syncPaper = () => {
+        const [lo, hi] = limits.map(mm => mm / unit.selectedOptions[0].dataset.mm);
+        custom.hidden = paper.value !== 'custom';
+        custom.querySelectorAll('input, select').forEach(field => field.disabled = custom.hidden);
+        custom.querySelectorAll('input').forEach(input => {
+            input.min = Math.ceil(lo * 100) / 100;
+            input.max = Math.floor(hi * 100) / 100;
+        });
+        custom.querySelector('.hint').textContent = `Each side: ${Math.ceil(lo * 100) / 100} to ${Math.floor(hi * 100) / 100} ${unit.value}`;
+    };
+    paper.addEventListener('change', syncPaper);
+    unit.addEventListener('change', syncPaper);
+    syncPaper();
 
     // Advanced options only count while open: closing ignores them (they are kept for next time) and drops back to the date range.
     const sync = () => {

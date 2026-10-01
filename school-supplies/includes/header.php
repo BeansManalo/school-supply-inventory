@@ -23,12 +23,17 @@ $active ??= basename($_SERVER['SCRIPT_NAME']);
         <?php foreach ($nav as $file => $label): ?>
             <a href="<?= $file ?>" class="<?= $file === $active ? 'active' : '' ?>"><?= e($label) ?></a>
         <?php endforeach; ?>
-        <button type="button" id="open-manager">&#9881;&#xFE0E; Manager</button>
+        <?php if (Auth::isSuperAdmin()): ?><button type="button" id="open-manager">&#9881;&#xFE0E; Manager</button><?php endif; ?>
+        <?php if (isset($_SESSION['user'])): ?>
+            <button form="signout" name="logout" title="Signed in as <?= e($_SESSION['user']['username']) ?>">Sign out</button>
+            <form id="signout" method="post" action="login.php"></form>
+        <?php endif; ?>
     </nav>
 </aside>
+<?php if (Auth::isSuperAdmin()): ?>
 <dialog id="manager-dialog" class="form manager">
     <h2>Manager</h2>
-    <p class="hint">The inventory is saved automatically on this computer. Keep a copy, restore one, or start over.</p>
+    <p class="hint">The inventory lives in the database, and a backup copy is refreshed on this computer every hour. Keep a copy, restore one, or start over.</p>
     <div class="mgr">
         <div>
             <strong>Save to file</strong>
@@ -37,19 +42,19 @@ $active ??= basename($_SERVER['SCRIPT_NAME']);
         <a class="btn" href="manager.php?save">Save</a>
     </div>
     <form class="mgr" method="post" action="manager.php" enctype="multipart/form-data"
-          data-confirm="Load this file? It replaces the current inventory and deletes all autosaves.">
+          data-confirm="Load this file? It replaces the whole inventory in the database.">
         <div>
             <strong>Load from file</strong>
-            <p class="hint">Replaces the current inventory and deletes all autosaves.</p>
+            <p class="hint">Replaces the whole inventory in the database with the file's content.</p>
             <input type="file" name="file" accept=".scinvent" required>
         </div>
         <button class="btn btn-secondary" name="load">Load</button>
     </form>
     <form class="mgr mgr-danger" method="post" action="manager.php"
-          data-confirm="Delete the entire inventory and every saved copy? This cannot be undone.">
+          data-confirm="Delete the entire inventory and the backup copy? This cannot be undone.">
         <div>
             <strong>Delete inventory</strong>
-            <p class="hint">Deletes all products, stock history and every save file. This can't be undone.</p>
+            <p class="hint">Deletes all products, stock history and the backup copy. Save to file first if you might want it back.</p>
         </div>
         <button class="btn btn-danger" name="delete">Delete</button>
     </form>
@@ -57,6 +62,7 @@ $active ??= basename($_SERVER['SCRIPT_NAME']);
         <button class="btn btn-secondary">Close</button>
     </form>
 </dialog>
+<?php endif; ?>
 <main class="content">
     <h1><?= e($title) ?></h1>
     <?php if (!empty($_SESSION['flash'])): ?>

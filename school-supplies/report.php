@@ -12,9 +12,16 @@ if ($from > $to) {
 $type = in_array($_GET['type'] ?? '', ['in', 'out'], true) ? $_GET['type'] : 'both';
 $group = in_array($_GET['group'] ?? '', ['product', 'category'], true) ? $_GET['group'] : 'date';
 $notes = ($_GET['notes'] ?? '1') === '1';
-$papers = require __DIR__ . '/includes/paper_sizes.php';
+['sizes' => $sizes, 'units' => $units, 'limits' => [$lo, $hi]] = require __DIR__ . '/includes/paper_sizes.php';
+$papers = array_merge(...array_values($sizes));
 $paper = in_array($_GET['paper'] ?? '', array_keys($papers), true) ? $_GET['paper'] : array_key_first($papers);
 [, $pw, $ph] = $papers[$paper];   // page width and height in mm
+if (($_GET['paper'] ?? '') === 'custom') {   // own size: width and height in the chosen unit, each held between the limits
+    $mm = $units[$_GET['unit'] ?? ''] ?? 1;
+    [$pw, $ph] = array_map(fn($side) => min($hi, max($lo, (float) ($_GET[$side] ?? 0) * $mm)), ['w', 'h']);
+}
+$land = ($_GET['orient'] ?? '') === 'landscape';
+[$pw, $ph] = $land ? [max($pw, $ph), min($pw, $ph)] : [min($pw, $ph), max($pw, $ph)];   // portrait: shorter side across; landscape: longer side across
 $cats = (array) ($_GET['cat'] ?? []);     // empty = every category
 $prods = (array) ($_GET['prod'] ?? []);   // empty = every product
 $days = array_filter(explode(',', (string) ($_GET['days'] ?? '')), $valid);   // specific days replace the date range
@@ -58,12 +65,12 @@ $typeLabel = ['both' => 'Stock in and out', 'in' => 'Stock in only', 'out' => 'S
 $latin = fn($s) => mb_convert_encoding((string) $s, 'Windows-1252', 'UTF-8');   // FPDF's built-in fonts are Windows-1252
 $range = $days ? implode(', ', array_map(fn($d) => date('M j, Y', strtotime($d)), $days)) : date('M j, Y', strtotime($from)) . ' – ' . date('M j, Y', strtotime($to));
 
-// Everything below is laid out from the paper's own size: margin 7% of the width (15 mm on A4), then usable width and bottom edge.
-$m = round($pw * .07);
+// Everything below is laid out from the paper's own size: margin 7% of the shorter side (15 mm on A4), then usable width and bottom edge.
+$m = round(min($pw, $ph) * .07);
 $W = $pw - 2 * $m;
 $bottom = $ph - $m;
 
-$pdf = new FPDF('P', 'mm', [$pw, $ph]);
+$pdf = new FPDF($land ? 'L' : 'P', 'mm', [$pw, $ph]);
 $pdf->SetMargins($m, $m, $m);
 $pdf->SetAutoPageBreak(false);
 $pdf->SetTitle('Stock Movement Report');
@@ -95,13 +102,16 @@ foreach ($cards as $i => [$label, $value]) {
 }
 $pdf->SetY($y + 23);
 
-// Columns: [heading, width in mm on A4's 180 mm (0 = whatever is left), alignment]
-$cols = [[$group === 'date' ? 'Time' : 'When', $group === 'date' ? 16 : 32, 'L'], ['Product', 0, 'L'], ['ID', 32, 'R']];
+// Columns: [heading, width in mm on A4's 180 mm (0 = share what is left), alignment, optional smallest width in mm]
+// Landscape layout: the note shares the free width with the product instead of keeping a fixed width, and the narrow columns stay as they are.
+$cols = [[$group === 'date' ? 'Time' : 'When', $group === 'date' ? 16 : 32, 'L'], ['Product', 0, 'L'], ['ID', 32, 'R', 26]];
 $showIn && $cols[] = ['In', 14, 'R'];
 $showOut && $cols[] = ['Out', 14, 'R'];
-$notes && $cols[] = ['Note', 42, 'L'];
-$fixed = array_map(fn($c) => $c[1] ? max(12, $c[1] * $W / 180) : 0, $cols);   // other papers scale the columns, never under 12 mm so numbers still fit
-$widths = array_map(fn($w) => $w ?: $W - array_sum($fixed), $fixed);
+$notes && $cols[] = ['Note', $land ? 0 : 42, 'L'];
+$k = $land ? min(1, $W / 180) : $W / 180;   // portrait scales the columns to the paper; landscape only shrinks them on a narrow one
+$fixed = array_map(fn($c) => $c[1] ? max($c[3] ?? 12, $c[1] * $k) : 0, $cols);   // never under 12 mm so numbers still fit; the ID keeps room for a 13-digit code
+$free = ($W - array_sum($fixed)) / count(array_filter($fixed, fn($w) => !$w));
+$widths = array_map(fn($w) => $w ?: $free, $fixed);
 $aligns = array_column($cols, 2);
 $headings = array_column($cols, 0);
 
@@ -126,6 +136,12 @@ $wrap = function (string $text, float $width) use ($pdf): array {
 };
 $prepare = fn(array $cells) => array_map(fn($c, $w) => $wrap($latin($c), $w - 3), $cells, $widths);
 $height = fn(array $lines) => max(array_map('count', $lines)) * 4.6 + 3;
+$cellsOf = fn($m) => [
+    $group === 'date' ? substr($m->date, 11) : $m->date, $inventory->product($m->productId)->name, $m->productId,
+    ...($showIn ? [$m->type === 'in' ? $m->quantity : ''] : []),
+    ...($showOut ? [$m->type === 'out' ? $m->quantity : ''] : []),
+    ...($notes ? [$m->note] : []),
+];
 
 // Draws one table row from wrapped cells; $kind is 'head', 'body' or 'total'.
 $draw = function (array $lines, string $kind) use ($pdf, $widths, $aligns, $height, $m, $W): void {
@@ -157,7 +173,7 @@ $draw = function (array $lines, string $kind) use ($pdf, $widths, $aligns, $heig
 };
 
 foreach ($groups as $label => $items) {
-    if ($pdf->GetY() + 36 > $bottom) {   // keep the heading with its header row and first entry
+    if ($pdf->GetY() + 17 + $height($prepare($headings)) + $height($prepare($cellsOf($items[0]))) > $bottom) {   // keep the heading with its header row and first entry (17 mm = heading, count line and some slack)
         $pdf->AddPage();
     }
     $pdf->SetFont('Helvetica', 'B', 11);
@@ -169,11 +185,7 @@ foreach ($groups as $label => $items) {
 
     $draw($prepare($headings), 'head');
     foreach ($items as $m) {
-        $cells = [$group === 'date' ? substr($m->date, 11) : $m->date, $inventory->product($m->productId)->name, $m->productId];
-        $showIn && $cells[] = $m->type === 'in' ? $m->quantity : '';
-        $showOut && $cells[] = $m->type === 'out' ? $m->quantity : '';
-        $notes && $cells[] = $m->note;
-        $lines = $prepare($cells);
+        $lines = $prepare($cellsOf($m));
         if ($pdf->GetY() + $height($lines) > $bottom) {
             $pdf->AddPage();
             $draw($prepare($headings), 'head');

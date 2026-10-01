@@ -21,7 +21,7 @@ include __DIR__ . '/includes/header.php';
 ?>
 <div class="actions">
     <button type="button" class="btn" id="open-scan">Scan QR code</button>
-    <a class="btn btn-secondary" href="product_form.php">+ Add product</a>
+    <button type="button" class="btn btn-secondary" id="open-add">+ Add product</button>
     <a class="btn btn-secondary" href="products.php?stock=1">Record stock in/out</a>
     <button type="button" class="btn btn-secondary" id="open-qr">Create QR code</button>
 </div>
@@ -130,14 +130,16 @@ include __DIR__ . '/includes/header.php';
     </section>
 </div>
 
+<?php include __DIR__ . '/includes/add_dialog.php'; ?>
 <dialog id="scan-dialog" class="form">
     <h2>Scan QR code</h2>
     <div data-source>
-        <p class="hint">Use a camera, or pick a saved image of the code. Only codes made with Create QR code are accepted.</p>
+        <p class="hint">Use a camera, take a photo, or pick a saved image of the code. Only codes made with Create QR code are accepted.</p>
         <p class="alert alert-error" hidden></p>
         <video autoplay muted playsinline hidden></video>
         <form method="dialog" class="actions">
             <button type="button" class="btn" data-camera>Use camera</button>
+            <button type="button" class="btn btn-secondary" data-photo>Take photo</button>
             <button type="button" class="btn btn-secondary" data-image>Choose image</button>
             <button class="btn btn-secondary">Cancel</button>
         </form>
@@ -146,62 +148,76 @@ include __DIR__ . '/includes/header.php';
     <form method="post" action="scan.php" data-verify hidden>
         <input type="hidden" name="apply" value="1">
         <input type="hidden" name="text">
+        <p class="hint" data-summary></p>
         <div class="alert alert-error" data-critical hidden>
-            <strong>Critical mismatch: nothing was added.</strong>
-            <p data-problem></p>
-            <p>To resolve it:</p>
+            <strong>Products with a critical mismatch are skipped: nothing is added for them.</strong>
+            <p>To resolve one:</p>
             <ul>
                 <li>If the inventory is right, discard this scan and make a new QR code with the inventory's code and name.</li>
                 <li>If the inventory is wrong, correct the product under Products, then scan again.</li>
-                <li>If this is a different product, give it a code and name that are not in use and make a new QR code.</li>
+                <li>If it is a different product, give it a code and name that are not in use and make a new QR code.</li>
             </ul>
         </div>
-        <p class="hint" data-status></p>
-        <fieldset data-fields>
-            <label>Product code <span class="hint"></span>
-                <input type="text" name="id" readonly>
-            </label>
-            <label>Product name <span class="hint"></span>
-                <input type="text" name="name" readonly>
-            </label>
-            <label>Category <span class="hint"></span>
-                <input type="text" name="category" maxlength="50">
-            </label>
-            <label>Stock to add <span class="hint"></span>
-                <input type="number" name="stock" min="1" step="1" required>
-            </label>
-            <label data-reorder>Reorder level <span class="hint">(not on the QR code; flagged as Low at or below this)</span>
-                <input type="number" name="reorder_level" min="0" step="1" required>
-            </label>
-        </fieldset>
-        <fieldset class="alert alert-warn" data-conflict hidden disabled>
-            <p></p>
-            <label><input type="radio" name="choice" value="keep" required> <span></span></label>
-            <label><input type="radio" name="choice" value="overwrite"> <span></span></label>
-        </fieldset>
+        <div class="scan-list" data-items></div>
         <div class="actions">
             <button class="btn" data-accept>Accept and add stock</button>
             <button class="btn btn-secondary" formmethod="dialog" formnovalidate>Discard</button>
         </div>
     </form>
 </dialog>
+<template id="scan-item">
+    <fieldset class="scan-item">
+        <div class="scan-head"><strong data-name></strong><span class="badge" data-badge></span></div>
+        <p class="hint" data-info></p>
+        <p class="alert alert-error" data-problem hidden></p>
+        <label data-for="stock">Stock to add <span class="hint">(not on the QR code)</span>
+            <input type="number" data-f="stock" min="1" step="1" required>
+        </label>
+        <label data-for="category">Category <span class="hint">(not on the QR code; optional)</span>
+            <input type="text" data-f="category" maxlength="50">
+        </label>
+        <label data-for="reorder">Restock level <span class="hint">(optional; flagged Low at or below this)</span>
+            <input type="number" data-f="reorder" min="0" step="1" placeholder="0">
+        </label>
+        <div class="alert alert-warn" data-conflict hidden>
+            <p></p>
+            <label><input type="radio" data-f="choice" value="keep" required> <span></span></label>
+            <label><input type="radio" data-f="choice" value="overwrite"> <span></span></label>
+        </div>
+    </fieldset>
+</template>
 <dialog id="qr-dialog" class="form">
     <h2>Create QR code</h2>
     <form>
-        <label>Product code
-            <input type="text" name="id" maxlength="50" required>
-        </label>
-        <label>Product name
-            <input type="text" name="name" maxlength="150" required>
-        </label>
-        <label>Category <span class="hint">(optional)</span>
-            <input type="text" name="category" maxlength="50">
-        </label>
-        <label>Stock to add <span class="hint">(optional; added to the product when the code is scanned)</span>
-            <input type="number" name="stock" min="1" step="1">
-        </label>
+        <div class="seg">
+            <label><input type="radio" name="mode" value="single" checked> Single product</label>
+            <label><input type="radio" name="mode" value="multi"> Multiple products</label>
+        </div>
+        <p class="hint" data-single>One product goes into this QR code. Any stock entered is added when the code is scanned.</p>
+        <p class="hint" data-multi>Everything in the queue goes into a single QR code. Any stock entered is added when the code is scanned.</p>
+        <div class="row2">
+            <label>Product code
+                <input type="text" name="id" maxlength="50" required>
+            </label>
+            <label>Product name
+                <input type="text" name="name" maxlength="150" required>
+            </label>
+        </div>
+        <div class="row2">
+            <label>Category <span class="hint">(optional)</span>
+                <input type="text" name="category" maxlength="50">
+            </label>
+            <label>Stock to add <span class="hint">(optional)</span>
+                <input type="number" name="stock" min="1" step="1">
+            </label>
+        </div>
+        <div class="qr-list-box" data-multi>
+            <div class="panel-head"><strong data-count></strong><button type="button" class="btn btn-link" data-clear>Clear all</button></div>
+            <ul class="qr-list"></ul>
+        </div>
         <div class="actions">
-            <button class="btn">Create</button>
+            <button class="btn btn-secondary" value="add" data-multi>Add Product</button>
+            <button class="btn" value="make" formnovalidate>Create QR code</button>
             <button class="btn btn-secondary" formmethod="dialog" formnovalidate>Cancel</button>
         </div>
     </form>
@@ -215,6 +231,9 @@ include __DIR__ . '/includes/header.php';
         </form>
     </div>
 </dialog>
+<template id="qr-item">
+    <li><div><strong></strong><small><span class="code"></span><span class="more"></span></small></div><button type="button" class="btn btn-link">Remove</button></li>
+</template>
 <script src="lib/qrcode/qrcode.js"></script>
-<script src="lib/jsqr/jsQR.js"></script>
+<script src="lib/zxing/index.js"></script>
 <?php include __DIR__ . '/includes/footer.php'; ?>

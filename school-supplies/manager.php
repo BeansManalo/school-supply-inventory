@@ -1,5 +1,6 @@
 <?php
 require __DIR__ . '/includes/bootstrap.php';
+Auth::isSuperAdmin() || redirect('index.php', 'Only the super admin can use the Manager.', 'error');   // Load and Delete replace or erase the whole database
 
 // Save-file actions from the Manager popup in the sidebar. Save is a download; Load and Delete are POSTs that end on the dashboard.
 if (isset($_GET['save'])) {

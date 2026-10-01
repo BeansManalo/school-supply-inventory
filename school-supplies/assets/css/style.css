@@ -28,6 +28,7 @@ a { color: var(--blue); }
 .sidebar a, .sidebar button { display: block; padding: 12px 20px; color: #cfdceb; text-decoration: none; border-left: 4px solid transparent; }
 .sidebar a:hover, .sidebar button:hover { background: rgba(255, 255, 255, .07); color: #fff; }
 .sidebar button { margin-top: auto; font: inherit; text-align: left; background: none; border-width: 0 0 0 4px; cursor: pointer; }   /* Manager: bottom of the sidebar */
+.sidebar button + button { margin: 0; }   /* Sign out sits right under Manager */
 .sidebar a.active { background: rgba(255, 255, 255, .1); color: #fff; border-left-color: var(--green); }
 .content { flex: 1; min-width: 0; padding: 28px 32px; }
 
@@ -80,8 +81,12 @@ a { color: var(--blue); }
 .empty { text-align: center; color: var(--muted); }
 
 /* Forms and buttons */
-.toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
-.toolbar input { width: 260px; margin: 0; }
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; padding: 12px 14px;
+           background: var(--card); border: 1px solid var(--border); border-radius: 8px; }
+.filters { display: flex; flex: 1 1 420px; flex-wrap: wrap; align-items: center; gap: 10px; }   /* wraps inside itself, so the buttons stay on the right */
+.toolbar > .actions { flex-shrink: 0; }
+.toolbar input[type=search] { width: 200px; margin: 0; }
+.toolbar select { width: auto; margin: 0; background: #fff; }
 .form { max-width: 480px; padding: 24px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; }
 .form label { display: block; margin-bottom: 14px; font-size: .9rem; font-weight: 600; }
 .hint { font-weight: normal; color: var(--muted); }
@@ -140,6 +145,18 @@ input:focus, select:focus { outline: 2px solid var(--blue); outline-offset: -1px
 .pack-foot .btn { margin-left: auto; }
 .check { display: flex; align-items: center; gap: 6px; }
 .check input, .checks input { width: auto; margin: 0; }
+
+/* Packages everywhere (Products, Reports): status-colored top edge, lift on hover. Products also gets ruled category headings. */
+#products .group h2 { margin: 4px 0 12px; padding-bottom: 6px; border-bottom: 2px solid var(--green); }
+#products .group + .group h2 { margin-top: 26px; }
+.pack { border-top: 3px solid var(--green); border-radius: 8px; transition: box-shadow .15s, transform .15s; }
+.pack:hover { box-shadow: 0 6px 16px rgba(18, 50, 79, .12); transform: translateY(-2px); }
+.pack-name { color: var(--blue-dark); }
+.pack[data-status="low"] { border-top-color: var(--warn); }
+.pack[data-status="low"] .value { color: var(--warn); }
+.pack[data-status="out"] { border-top-color: var(--danger); }
+.pack[data-status="out"] .value { color: var(--danger); }
+#products .empty { padding: 32px 0; }
 
 /* Movement history */
 .section-head { display: flex; align-items: center; justify-content: space-between; margin: 28px 0 12px; }
@@ -222,12 +239,14 @@ dialog h2 { margin-top: 0; }
 
 /* Create report popup */
 .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.row3 { display: grid; grid-template-columns: 1fr 1fr 5rem; gap: 12px; }
 details { margin-bottom: 14px; }
 summary { margin-bottom: 12px; font-weight: 600; color: var(--blue); cursor: pointer; }
 .form p.hint { margin: 0 0 4px; font-size: .9rem; }
 .form .checks { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; max-height: 150px; margin-bottom: 14px; padding: 8px 10px;
                 overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; }
 .form .checks.wide { grid-template-columns: 1fr; }
+.form #prod-search { margin: 0 0 6px; }
 .checks .code { margin-left: auto; padding-left: 8px; }
 .form .checks label { display: flex; align-items: center; gap: 6px; margin: 0; font-weight: normal; }
 
@@ -241,18 +260,36 @@ summary { margin-bottom: 12px; font-weight: 600; color: var(--blue); cursor: poi
 .day-pick .hint { margin: 8px 0 0; }
 .day-pick .cal-foot { margin-top: 10px; }
 
-/* QR popup on the dashboard */
-.qr-result canvas { display: block; width: 100%; max-width: 300px; height: auto; margin: 0 auto 8px; border: 1px solid var(--border); }
+/* QR popup on the dashboard: wide enough to show a dense code at a size a camera can read off the screen */
+#qr-dialog { width: min(600px, 96vw); max-width: 600px; }
+#qr-dialog .actions { flex-wrap: wrap; }
+#qr-dialog .seg label:last-child:has(input:checked) { background: var(--green); border-color: var(--green); }   /* both modes are equal choices, so no red */
+#qr-dialog form:has([value=single]:checked) [data-multi],
+#qr-dialog form:has([value=multi]:checked) [data-single] { display: none; }   /* each mode shows only its own parts */
+.qr-list-box { margin-bottom: 14px; }
+.qr-list-box .panel-head { margin-bottom: 6px; font-size: .9rem; }
+.qr-list { max-height: 152px; margin: 0; padding: 0; overflow-y: auto; list-style: none; border: 1px solid var(--border); border-radius: 6px; }
+.qr-list:empty::before { content: 'Products you add appear here.'; display: block; padding: 14px 10px; text-align: center; font-size: .85rem; color: var(--muted); }
+.qr-list li { display: flex; align-items: center; gap: 10px; padding: 7px 10px; }
+.qr-list li + li { border-top: 1px solid var(--border); }
+.qr-list li div { flex: 1; min-width: 0; }
+.qr-list strong, .qr-list small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qr-list strong { font-size: .9rem; }
+.qr-list small { font-size: .8rem; color: var(--muted); }
+.qr-result canvas { display: block; width: 100%; max-width: 560px; height: auto; margin: 0 auto 8px; border: 1px solid var(--border); }
 .qr-result .hint { text-align: center; overflow-wrap: anywhere; }
-.qr-result .actions { flex-wrap: wrap; }
 
 /* Scan popup on the dashboard */
 #scan-dialog { width: min(480px, 92vw); }
 #scan-dialog .actions { flex-wrap: wrap; }
-#scan-dialog [data-status] { margin-bottom: 14px; }
-#scan-dialog video { display: block; width: 100%; margin-bottom: 14px; background: #000; border-radius: 6px; }
+#scan-dialog video { display: block; width: 100%; max-height: 55vh; margin-bottom: 14px; background: #000; border-radius: 6px; }
+@media (pointer: fine) { #scan-dialog [data-photo] { display: none; } }   /* Take photo opens a phone's camera app; on a computer Choose image covers it */
 #scan-dialog fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
-#scan-dialog fieldset.alert { margin-bottom: 14px; padding: 10px 14px; border: 1px solid #f3dca8; }
+.scan-list { max-height: 50vh; margin-bottom: 14px; overflow-y: auto; }
+#scan-dialog fieldset.scan-item { margin-bottom: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px; }
+.scan-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.scan-head strong { min-width: 0; overflow-wrap: anywhere; }
+.scan-item .hint { margin: 2px 0 10px; font-size: .85rem; overflow-wrap: anywhere; }
 
 /* Manager popup (sidebar): one row per save-file action */
 .mgr { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 16px; padding: 14px 0; border-top: 1px solid var(--border); }
@@ -261,3 +298,11 @@ summary { margin-bottom: 12px; font-weight: 600; color: var(--blue); cursor: poi
 .mgr input[type=file] { margin-top: 8px; padding: 6px; font-size: .85rem; }
 .mgr-danger strong { color: var(--danger); }
 .manager .actions { justify-content: flex-end; padding-top: 14px; border-top: 1px solid var(--border); }
+
+/* Sign-in page */
+.login { width: min(380px, calc(100% - 32px)); margin: auto; padding: 32px 28px; text-align: center; border-top: 4px solid var(--green); }
+.login .stat-icon { width: 52px; height: 52px; margin: 0 auto 12px; }
+.login h1 { margin-bottom: 4px; }
+.login form { margin-top: 20px; }
+.login label { text-align: left; }
+.login .btn { width: 100%; padding: 10px; }

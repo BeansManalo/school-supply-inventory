@@ -1,0 +1,7 @@
+# Never downloadable through the web server: the database passwords, the schema files, the installer.
+<FilesMatch "^(config\.local\.php|install\.php|.*\.sql)$">
+    Require all denied
+</FilesMatch>
+
+# XAMPP lists the contents of folders that have no index file; don't.
+Options -Indexes
