@@ -16,14 +16,15 @@ set_exception_handler(function (Throwable $ex) {
 // cookie_secure: over https the cookie is never sent in the clear (it stays off on plain http, or sign-in would not work there at all).
 session_start(['cookie_httponly' => true, 'cookie_samesite' => 'Lax', 'cookie_secure' => !empty($_SERVER['HTTPS'])]);   // also holds the flash message and the signed-in account; its lock keeps one browser's requests from saving over each other
 
-// Everything except login.php needs a signed-in account (see core/Auth.php).
+// Everything except login.php and signup.php (which define LOGIN_PAGE) needs a signed-in account (see core/Auth.php).
 if (!defined('LOGIN_PAGE')) {
+    empty($_SESSION['user']) || Auth::refresh();   // the role is read again on every request
     if (empty($_SESSION['user'])) {
         ($_SERVER['HTTP_SEC_FETCH_MODE'] ?? 'navigate') === 'navigate' && redirect('login.php');   // a page: go sign in
         http_response_code(401);   // a fetch() from the page (QR, scan, report): app.js shows this text
         exit('Your session has ended. Reload the page and sign in again.');
     }
-    $inventory = new Inventory();   // read from the database (see core/Inventory.php) on every request
+    defined('NO_INVENTORY') || $inventory = new Inventory();   // read from the database (see core/Inventory.php) on every request, except poll.php's
 }
 
 /** Escape a value for HTML output. */

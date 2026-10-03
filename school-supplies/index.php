@@ -20,10 +20,16 @@ $recent = array_slice($inventory->movements(), 0, 6);
 include __DIR__ . '/includes/header.php';
 ?>
 <div class="actions">
-    <button type="button" class="btn" id="open-scan">Scan QR code</button>
-    <button type="button" class="btn btn-secondary" id="open-add">+ Add product</button>
-    <a class="btn btn-secondary" href="products.php?stock=1">Record stock in/out</a>
-    <button type="button" class="btn btn-secondary" id="open-qr">Create QR code</button>
+    <?php if (Auth::can('products')): ?>
+        <button type="button" class="btn" id="open-scan">Scan QR code</button>
+        <button type="button" class="btn btn-secondary" id="open-add">+ Add product</button>
+    <?php endif; ?>
+    <?php if (Auth::can('stock')): ?>
+        <a class="btn btn-secondary" href="products.php?stock=1">Record stock in/out</a>
+    <?php endif; ?>
+    <?php if (Auth::can('products')): ?>
+        <button type="button" class="btn btn-secondary" id="open-qr">Create QR code</button>
+    <?php endif; ?>
 </div>
 
 <div class="cards">
@@ -130,6 +136,7 @@ include __DIR__ . '/includes/header.php';
     </section>
 </div>
 
+<?php if (Auth::can('products')): ?>
 <?php include __DIR__ . '/includes/add_dialog.php'; ?>
 <dialog id="scan-dialog" class="form">
     <h2>Scan QR code</h2>
@@ -236,4 +243,5 @@ include __DIR__ . '/includes/header.php';
 </template>
 <script src="lib/qrcode/qrcode.js"></script>
 <script src="lib/zxing/index.js"></script>
+<?php endif; ?>
 <?php include __DIR__ . '/includes/footer.php'; ?>

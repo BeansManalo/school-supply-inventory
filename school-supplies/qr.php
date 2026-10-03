@@ -1,5 +1,6 @@
 <?php
 require __DIR__ . '/includes/bootstrap.php';
+Auth::need('products');
 
 // QR codes: takes the dashboard popup's product list (JSON) and returns the text to encode, or a 422 with the reason.
 header('Content-Type: text/plain; charset=utf-8');

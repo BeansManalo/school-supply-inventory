@@ -27,8 +27,14 @@ a { color: var(--blue); }
 .brand { margin-bottom: 10px; padding: 0 20px 20px; font-size: 1.1rem; font-weight: 700; border-bottom: 3px solid var(--green); }
 .sidebar a, .sidebar button { display: block; padding: 12px 20px; color: #cfdceb; text-decoration: none; border-left: 4px solid transparent; }
 .sidebar a:hover, .sidebar button:hover { background: rgba(255, 255, 255, .07); color: #fff; }
-.sidebar button { margin-top: auto; font: inherit; text-align: left; background: none; border-width: 0 0 0 4px; cursor: pointer; }   /* Manager: bottom of the sidebar */
-.sidebar button + button { margin: 0; }   /* Sign out sits right under Manager */
+.sidebar button { margin: 0; font: inherit; text-align: left; background: none; border-width: 0 0 0 4px; cursor: pointer; }
+.sidebar .account { display: flex; align-items: center; gap: 10px; margin-top: auto; }   /* the signed-in account: bottom of the sidebar, Sign out right under it */
+.avatar { display: grid; place-items: center; width: 34px; height: 34px; flex-shrink: 0; font-weight: 700; color: #fff; background: var(--green); border-radius: 50%; }
+.who { min-width: 0; line-height: 1.25; }
+.who b, .who small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.who b { color: #fff; }
+.who small { font-size: .75rem; color: #9fb4cb; }
+.count { min-width: 20px; margin-left: auto; padding: 0 6px; font-size: .75rem; font-weight: 700; line-height: 20px; text-align: center; color: #fff; background: var(--danger); border-radius: 999px; }   /* access requests waiting (super admin) */
 .sidebar a.active { background: rgba(255, 255, 255, .1); color: #fff; border-left-color: var(--green); }
 .content { flex: 1; min-width: 0; padding: 28px 32px; }
 
@@ -122,7 +128,8 @@ input:focus, select:focus { outline: 2px solid var(--blue); outline-offset: -1px
     .sidebar { position: static; width: auto; height: auto; padding-bottom: 0; }
     .sidebar nav { flex-direction: row; overflow-x: auto; }
     .sidebar a, .sidebar button { padding: 12px 8px; white-space: nowrap; border-left: 0; }
-    .sidebar button { margin: 0 0 0 auto; }
+    .sidebar .account { margin: 0 0 0 auto; padding: 8px; }
+    .who small { display: none; }
     .content { padding: 20px 16px; }
 }
 
@@ -291,13 +298,12 @@ summary { margin-bottom: 12px; font-weight: 600; color: var(--blue); cursor: poi
 .scan-head strong { min-width: 0; overflow-wrap: anywhere; }
 .scan-item .hint { margin: 2px 0 10px; font-size: .85rem; overflow-wrap: anywhere; }
 
-/* Manager popup (sidebar): one row per save-file action */
+/* Database panel (account page, super admin): one row per save-file action */
 .mgr { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 16px; padding: 14px 0; border-top: 1px solid var(--border); }
-.form.manager > p.hint { margin-bottom: 14px; }
+.manager > p.hint { margin-bottom: 14px; }
 .manager .mgr p.hint { margin: 3px 0 0; }
 .mgr input[type=file] { margin-top: 8px; padding: 6px; font-size: .85rem; }
 .mgr-danger strong { color: var(--danger); }
-.manager .actions { justify-content: flex-end; padding-top: 14px; border-top: 1px solid var(--border); }
 
 /* Sign-in page */
 .login { width: min(380px, calc(100% - 32px)); margin: auto; padding: 32px 28px; text-align: center; border-top: 4px solid var(--green); }
@@ -306,3 +312,31 @@ summary { margin-bottom: 12px; font-weight: 600; color: var(--blue); cursor: poi
 .login form { margin-top: 20px; }
 .login label { text-align: left; }
 .login .btn { width: 100%; padding: 10px; }
+.login form + p.hint { margin-top: 16px; }
+
+/* Account page: the signed-in account and password for everyone, then the super admin's panels */
+.account-top { align-items: start; }
+.profile { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
+.avatar.big { width: 64px; height: 64px; font-size: 1.6rem; }
+.badge.role { color: var(--blue); background: #e4eef8; }
+.can { margin: 4px 0 0; padding-left: 20px; }
+.request { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); }
+.request h2 { margin: 0 0 8px; font-size: 1.05rem; }
+.request label { display: block; margin-bottom: 12px; font-size: .9rem; font-weight: 600; }
+.request p.hint { margin: 8px 0 0; font-size: .85rem; }
+.accounts .note { max-width: 260px; overflow-wrap: anywhere; }
+.account-top .form { max-width: none; }
+.account-top h2 { margin-top: 0; }
+.admin-head { margin: 32px 0 12px; padding-bottom: 6px; border-bottom: 2px solid var(--green); }
+.panel { margin-bottom: 16px; }
+.panel > p.hint { margin: 0 0 12px; font-size: .9rem; }
+.table-wrap { overflow-x: auto; }
+.accounts { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.accounts th { padding: 8px 12px; text-align: left; font-size: .75rem; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--border); }
+.accounts td { padding: 10px 12px; vertical-align: middle; border-top: 1px solid var(--border); }
+.accounts th:first-child, .accounts td:first-child { padding-left: 0; }
+.accounts select { width: auto; margin: 0; background: #fff; }
+.accounts form { display: inline; }
+.row-actions { text-align: right; white-space: nowrap; }
+.row-actions > * + * { margin-left: 14px; }
+.btn-link.danger { color: var(--danger); }

@@ -1,7 +1,17 @@
 # Never downloadable through the web server: the database passwords, the schema files, the installer.
-<FilesMatch "^(config\.local\.php|install\.php|.*\.sql)$">
+<FilesMatch "^(config\.local\.php|install\.php|ws-server\.php|.*\.sql)$">
     Require all denied
 </FilesMatch>
 
 # XAMPP lists the contents of folders that have no index file; don't.
 Options -Indexes
+
+# Live updates: a browser's WebSocket to /ws is passed on to ws-server.php, which listens on this PC only (core/Push.php).
+# Needs mod_proxy_wstunnel, which Setup.bat switches on in XAMPP. Without it /ws is a 404 and pages simply keep polling.
+# The port is 'push' => 'port' in config.local.php (8765 unless you changed it); change both together.
+<IfModule mod_proxy_wstunnel.c>
+    <IfModule mod_rewrite.c>
+        RewriteEngine On
+        RewriteRule ^ws$ ws://127.0.0.1:8765/ [P,L]
+    </IfModule>
+</IfModule>

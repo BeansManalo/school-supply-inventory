@@ -52,11 +52,10 @@ document.querySelectorAll('[data-edit]').forEach(button => {
     });
 });
 
-// Ask before submitting any <form data-confirm="message">.
-document.querySelectorAll('form[data-confirm]').forEach(form => {
-    form.addEventListener('submit', event => {
-        if (!confirm(form.dataset.confirm)) event.preventDefault();
-    });
+// Ask before submitting any <form data-confirm="message">. Listens on the document, so it also covers panels that Live updates redraw.
+document.addEventListener('submit', event => {
+    const message = event.target.dataset?.confirm;
+    if (message && !confirm(message)) event.preventDefault();
 });
 
 // Movement history tabs: clicking a day tab shows that day's panel.
@@ -74,8 +73,18 @@ document.getElementById('open-stock')?.addEventListener('click', () => document.
 document.getElementById('open-add')?.addEventListener('click', () => document.getElementById('add-dialog').showModal());
 document.querySelectorAll('dialog[data-open]').forEach(d => d.showModal());
 
-// Manager popup (sidebar button on every page, super admin only).
-document.getElementById('open-manager')?.addEventListener('click', () => document.getElementById('manager-dialog').showModal());
+// Reset-password popup (account page, super admin): <button data-reset> opens it for that account. Listens on the document and looks the
+// popup up each time, because Live updates redraw the Accounts panel it sits in.
+document.addEventListener('click', event => {
+    const button = event.target.closest('[data-reset]');
+    if (!button) return;
+    const resetDialog = document.getElementById('reset-dialog');
+    const fields = resetDialog.querySelector('form').elements;
+    fields.id.value = button.dataset.reset;
+    fields.new.value = '';
+    resetDialog.querySelector('[data-name]').textContent = button.dataset.name;
+    resetDialog.showModal();
+});
 
 // QR popup (dashboard only, where the QR library is loaded): the products added so far go to qr.php, which returns them
 // compressed and encrypted as text; the code is drawn and offered as a PNG.
@@ -513,4 +522,74 @@ if (reportDialog) {
         reportDialog.close();
         window.open(URL.createObjectURL(pdf)) || alert('Saved. Allow pop-ups for this site so the PDF opens in a new tab.');
     });
+}
+
+// Live updates (every signed-in page). poll.php is asked what changed for this account; the answer is acted on:
+//  - its role changed: the page is drawn again with the new buttons;  - its session ended (banned, deleted): off to the sign-in page;
+//  - super admin: the number of waiting requests on the account button and in the tab title;
+//  - account page: the [data-live] panels are swapped for fresh HTML when their version (data-v) is out of date. A panel is left alone
+//    while someone is typing or choosing in it or a popup is open, and is swapped on a later poll.
+// When to ask: at once when the push server sends a message over the WebSocket (core/Push.php, ws-server.php), and otherwise every 5
+// seconds (15 in a background tab). With the WebSocket connected that timer only backs it up, once a minute. If /ws cannot be reached
+// (push server down, Apache without the proxy), the page just keeps polling, and tries the WebSocket again with growing pauses.
+if (document.body.dataset.role) {
+    const baseTitle = document.title.replace(/^\(\d+\) /, '');
+    const account = document.querySelector('.sidebar .account');
+    const badge = account?.querySelector('.count');
+    let token = document.body.dataset.push, socket = null, timer, running = false, again = false;
+
+    const poll = async () => {
+        if (running) return void (again = true);   // a push arrived while asking: ask once more afterwards
+        running = true;
+        clearTimeout(timer);
+        try {
+            const query = new URLSearchParams();
+            document.querySelectorAll('[data-live]').forEach(panel => query.set(`v[${panel.dataset.live}]`, panel.dataset.v));
+            const response = await fetch('poll.php?' + query, { cache: 'no-store' });
+            if (response.status === 401) return location.replace('login.php?ended');
+            const data = await response.json();
+            if (data.role !== document.body.dataset.role) return location.replace(location.pathname + location.search);
+            token = data.push ?? token;
+            if (badge) {
+                badge.hidden = !data.pending;
+                badge.textContent = data.pending;
+                account.href = data.pending ? 'account.php#mailbox' : 'account.php';
+                account.title = data.pending ? `${data.pending} access request(s) waiting` : 'Your account';
+                document.title = (data.pending ? `(${data.pending}) ` : '') + baseTitle;
+            }
+            for (const [name, html] of Object.entries(data.panels ?? {})) {
+                const panel = document.querySelector(`[data-live="${name}"]`);
+                const field = document.activeElement;
+                const typing = panel?.contains(field) && /^(INPUT|SELECT|TEXTAREA)$/.test(field.tagName);
+                if (panel && !typing && !document.querySelector('dialog[open]')) panel.outerHTML = html;
+            }
+        } catch {}   // offline or the server restarting: try again next time
+        running = false;
+        timer = setTimeout(poll, again ? 1000 : socket ? 60000 : document.hidden ? 15000 : 5000);   // pushes are answered at most once a second
+        again = false;
+    };
+
+    let pause = 5000;
+    const connect = () => {
+        if (!token || !('WebSocket' in window)) return;
+        const ws = new WebSocket(new URL('ws', location.href).href.replace(/^http/, 'ws'));
+        ws.onopen = () => ws.send(JSON.stringify({ t: token }));
+        ws.onmessage = event => {
+            if (event.data === 'ok') {   // the server knows who we are: from now on pushes arrive, and the timer is only a backup
+                socket = ws;
+                pause = 5000;
+            }
+            poll();
+        };
+        ws.onclose = () => {
+            if (socket === ws) {
+                socket = null;
+                poll();   // back to the 5 second timer at once
+            }
+            setTimeout(connect, pause = Math.min(pause * 2, 60000));
+        };
+    };
+
+    timer = setTimeout(poll, 5000);
+    connect();
 }

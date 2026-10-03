@@ -22,6 +22,16 @@ try {
     exit('Could not sign in as root: ' . $ex->getMessage() . "\n");
 }
 
+// This server may hold other programs' databases. Only the two below are ever touched (every name here starts with sc_), and a database
+// that already has someone else's tables in it is left alone: the setup stops instead of adding to it.
+$ours = ['sc_inventory' => ['categories', 'products', 'movements'], 'sc_accounts' => ['roles', 'users', 'requests', 'settings']];
+foreach ($ours as $database => $tables) {
+    $found = $root->query('SELECT LOWER(table_name) FROM information_schema.tables WHERE table_schema = ' . $root->quote($database))->fetchAll(PDO::FETCH_COLUMN);
+    if ($found && !array_intersect($found, $tables)) {
+        throw new RuntimeException("A database named $database already exists and holds tables that are not this app's (" . implode(', ', array_slice($found, 0, 5)) . '). Nothing was changed. Rename or remove that database first, or ask whoever owns it.');
+    }
+}
+
 // One limited account per database, each with a new random password. They exist before the schema files run, because those grant to them.
 $config = ['port' => $port];
 foreach (['inventory' => 'sc_inventory', 'accounts' => 'sc_accounts'] as $key => $database) {
@@ -42,6 +52,9 @@ if (!$root->query('SELECT 1 FROM sc_accounts.users LIMIT 1')->fetch()) {
         ->execute(['admin', password_hash('1234', PASSWORD_DEFAULT), 'super_admin']);
     echo "Created the super admin account: admin / 1234. Replace that password (README).\n";
 }
+
+$old = is_file(__DIR__ . '/config.local.php') ? ((require __DIR__ . '/config.local.php')['push'] ?? []) : [];
+$config['push'] = ['port' => $old['port'] ?? 8765, 'secret' => $old['secret'] ?? bin2hex(random_bytes(32)), 'php' => PHP_BINARY];   // see core/Push.php
 
 file_put_contents(__DIR__ . '/config.local.php', "<?php\n// Database passwords, written by install.php. Never commit this file or serve it.\nreturn " . var_export($config, true) . ";\n");
 @chmod(__DIR__ . '/config.local.php', 0600);

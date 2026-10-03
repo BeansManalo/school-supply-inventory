@@ -9,14 +9,18 @@ if (isset($_POST['logout'])) {
 }
 isset($_SESSION['user']) && redirect('index.php');
 
-$notice = isset($_GET['out']) ? ['Signed out.', 'ok'] : null;
+$notice = isset($_GET['out']) ? ['Signed out.', 'ok'] : (isset($_GET['new']) ? ['Account created. Sign in to continue.', 'ok'] : (isset($_GET['ended']) ? ['Your session ended. If you did not sign out, your account may have been banned or removed.', 'error'] : null));
 if (is_string($_POST['username'] ?? null) && is_string($_POST['password'] ?? null)) {
     if ($account = Auth::attempt(trim($_POST['username']), $_POST['password'])) {
-        session_regenerate_id(true);   // a new session id on sign-in, so an id someone planted before it is useless
-        $_SESSION['user'] = $account;
-        redirect('index.php');
-    }
-    $notice = ['Wrong username or password. After 5 wrong passwords in a row an account is locked for 15 minutes.', 'error'];   // the same text whether or not the username exists or the account is locked
+        if (empty($account['banned'])) {
+            session_regenerate_id(true);   // a new session id on sign-in, so an id someone planted before it is useless
+            $_SESSION['user'] = $account;
+            redirect('index.php');
+        }
+        $notice = ['This account has been banned. Ask the super admin.', 'error'];
+    } else {
+        $notice = ['Wrong username or password. After 5 wrong passwords in a row an account is locked for 15 minutes.', 'error'];
+    }   // the same text whether or not the username exists or the account is locked
 }
 ?>
 <!DOCTYPE html>
@@ -42,6 +46,7 @@ if (is_string($_POST['username'] ?? null) && is_string($_POST['password'] ?? nul
         </label>
         <button class="btn">Sign in</button>
     </form>
+    <p class="hint">No account yet? <a href="signup.php">Sign up</a></p>
 </main>
 </body>
 </html>

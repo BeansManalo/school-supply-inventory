@@ -4,6 +4,26 @@ Basic inventory system for school supplies: products, stock in/out, and inventor
 HTML/CSS/JS/PHP with a MariaDB database (XAMPP).
 
 ## First-time setup (XAMPP)
+There are two ways to get the same result: **automatic** (double-click `Setup.bat`; recommended) or **manual** (steps 1 to 11 under *Manual setup*). Use one or the other.
+
+### Automatic setup (recommended)
+It does steps 1 to 8 of the manual setup for you, and it is safe to run again if it stops half-way.
+1. Install XAMPP. You don't need to start anything: `Setup.bat` starts MySQL and Apache itself.
+2. Unzip the whole project anywhere. `Setup.bat`, `Revert.bat` and `setup.php` sit *next to* this `school-supplies` folder, not inside it; keep them together.
+3. Double-click **`Setup.bat`** and choose **Yes** when Windows asks for administrator permission (MySQL and Apache then run as administrator, and `Setup.bat` makes the XAMPP Control Panel open as administrator too, so it can see and stop them). If XAMPP is not in `C:\xampp` (or another drive's `xampp` folder), it asks for the folder.
+4. Answer the questions: a new MariaDB `root` password, then the password you will sign in to the app with. Each is asked twice, typed hidden, at least 8 characters, and the two must differ (see *Three passwords* below for what each is for; any characters are fine).
+5. When it says `Done.`, the app is open in your browser: sign in as `admin` with the password you just chose.
+
+What it does, in order: checks that XAMPP, the app files and the needed PHP extensions are all there (it lists what is missing and changes nothing until that is fixed); copies the app into `<XAMPP>\htdocs\school-supplies`; sets `bind-address=127.0.0.1` in `my.ini`; turns on the phpMyAdmin login; starts MySQL; gives `root` its password and drops the anonymous accounts; runs `install.php`; replaces the `1234` admin password; starts Apache and checks that `config.local.php` and the `.sql` files answer **Forbidden**. Every step is skipped if it is already done, so running `Setup.bat` again just continues from where it stopped, or confirms that everything is in place.
+
+Where it can fix a known problem itself it does (stale MySQL log files, a MySQL that stops right after it starts - XAMPP's clean data folder replaces `mysql\data` and the old one is kept as `data-old-<date and time>`, but only when it holds no databases of your own - a crashed system table, a damaged phpMyAdmin `config.inc.php`, `AllowOverride` in `httpd.conf`, a Windows service such as IIS or SQL Server Reporting Services sitting on Apache's port: it stops it and sets it to Disabled so it stays off after a restart). Where it can't (another program using the MySQL port, or a program that is not a Windows service on Apache's port, a forgotten root password, a damaged `my.ini`) it stops and says what is wrong; fix that and run `Setup.bat` again, nothing is lost.
+
+Afterwards MySQL and Apache keep running in the background; press **Stop** on both in the XAMPP Control Panel when you are done (see *Every day*).
+Coming from the older file-based version? Do the **Manager > Save** part of step 1 *before* running `Setup.bat`, and step 10 after it. Steps 9 and 11 are the same either way.
+
+**Undo:** double-click `Revert.bat`. Before it changes anything, `Setup.bat` keeps the original `my.ini`, phpMyAdmin `config.inc.php` and `httpd.conf` (whichever it edits), a list of the app files it added or replaced, and the original `root` and anonymous accounts, in `<XAMPP>\school-supplies-setup-backup`. Revert asks you to confirm, then asks for the root password and puts all of that back: the two databases and the two app accounts it created are removed (their data is saved to a `.sql` file in that folder first), `root` and the anonymous accounts return to how XAMPP ships them (no password, open to everyone on this PC), the added app files are deleted, any Windows service it disabled gets its old startup type back (it starts again at the next restart), and Apache and MySQL are stopped. The folder is renamed `school-supplies-setup-backup-reverted-<date and time>` and kept.
+
+### Manual setup
 Follow these steps in order, starting with XAMPP completely off (nothing running). XAMPP installs MariaDB open to anyone, with no password, so steps 2 to 5 lock it down *before* any data goes in. Don't skip or reorder them.
 
 Below, **`<XAMPP>`** is the folder XAMPP is installed in (usually `C:\xampp`). Anything in `<angle brackets>`, and anything called an example, is a placeholder: swap in your own value, don't type it literally.
@@ -76,37 +96,34 @@ In a browser, `http://localhost/school-supplies/config.local.php` and `http://lo
 Then open `http://localhost/school-supplies/`: you get the sign-in page.
 
 ### 8. Replace the admin password
-Sign in once as `admin` / `1234` to see that everything works. Then, because there is no change-password page yet, do it by hand. Choose a new password (not the root one), and in the Shell make its hash:
-```
-php -r "echo password_hash('your new password', PASSWORD_DEFAULT);"
-```
-It prints one line starting with `$2y$`, 60 characters long (a new one every time, which is normal). Select it with the mouse and press Enter to copy, without the prompt after it. Then run `mysql -u root -p`, enter the root password, and run (hash pasted between the quotes):
-```sql
-UPDATE sc_accounts.users SET password_hash = '<paste the whole hash>' WHERE username = 'admin';
-```
-You should see `Rows matched: 1  Changed: 1`. Type `exit`, press **Sign out** in the app, check that `1234` is now refused and the new password works. (Root is needed because the app's own database account can read password hashes but is deliberately not allowed to change them.)
+Sign in once as `admin` / `1234`, open **Account** (bottom of the sidebar) and use **Change password**. Choose a new password, then **Sign out** and check that `1234` is refused and the new one works. (`Setup.bat` asks for the new password for you.)
+
 Only after this should the site be reachable from other computers.
 
 ### 9. Look at the databases (optional)
 With Apache and MySQL running, open `http://localhost/phpmyadmin`. You get a login form: username `root`, and the root password. `sc_inventory` and `sc_accounts` are in the left list; click a table, then **Browse**. The app's own accounts and the `admin` login do not work here.
-Look, don't edit: a hand-edit that breaks a rule (for example stock below zero) makes the app refuse to load with "Invalid save data". Use the app, or take a **Manager > Save** first.
+Look, don't edit: a hand-edit that breaks a rule (for example stock below zero) makes the app refuse to load with "Invalid save data". Use the app, or take an **Account > Database > Save** first.
 
 ### 10. Restore your old data (if you had some)
-Sign in, open **Manager > Load from file** and pick the `.scinvent` file from step 1.
+Sign in as `admin`, open **Account**, and under **Database** use **Load from file** to pick the `.scinvent` file from step 1.
 
 ### 11. Try it
-Add a product in a new category; record a stock-in, then a stock-out bigger than the stock (it must be refused); delete the product; try **Manager > Save** and **Load**.
+Add a product in a new category; record a stock-in, then a stock-out bigger than the stock (it must be refused); delete the product; try **Save** and **Load** under **Account > Database**.
 
 ### Every day
-Start MySQL, then Apache. When you are done, press **Stop** on both before shutting Windows down: a MySQL that is cut off can leave a system table marked as crashed (see below).
+Start MySQL, then Apache (or just run `Setup.bat` again: it starts both, repairs the known start-up problems and opens the app). When you are done, press **Stop** on both before shutting Windows down: a MySQL that is cut off can leave a system table marked as crashed (see below).
 
 ### Troubleshooting
+- **`Setup.bat` stopped with "Stopped: ..."**: the message says what happened. Fix that, then run `Setup.bat` again, or `Revert.bat` to undo. The other items below apply to the manual steps, and to the same problems if you meet them yourself.
+- **XAMPP Control Panel: Apache says `Port 80 in use by "Unable to open process" with PID 4`**: PID 4 is Windows itself holding the port for a service that uses its web driver, usually IIS (`W3SVC`) or SQL Server Reporting Services. `Setup.bat` finds it and does this first, before anything else: Windows shows one permission prompt (choose Yes), then it stops the service and sets it to Disabled for good. By hand, in an administrator Command Prompt: `sc config W3SVC start= disabled` and `net stop W3SVC`. If it is not one of those, `netsh http show servicestate view=requestq` names the program.
+- **XAMPP Control Panel: Apache says `Port 80 in use by "Unable to open process"` with a PID other than 4** (same PID on ports 80 and 443): that is an Apache that is already running, started as administrator, which an ordinary XAMPP Control Panel is not allowed to see (so it shows Apache as stopped, and Start then collides with it). Check the site first: if `http://localhost/school-supplies/` opens, nothing is wrong. Close the panel and open it with right-click > **Run as administrator** (`Setup.bat` sets this up for you); it then shows Apache as running and Stop works. To clear it by hand, in an administrator Command Prompt: `taskkill /F /IM httpd.exe`.
+- **XAMPP Control Panel: `MySQL shutdown unexpectedly`**: not related to port 80 (MySQL uses its own port). The usual cause is Windows going down without **Stop** on MySQL, which leaves stale Aria log files. `Setup.bat` clears them and starts MySQL, and it adds `aria_force_start_after_recovery_failures=1` to `my.ini` so MariaDB clears them itself next time. If it still fails, the real reason is at the end of `<XAMPP>\mysql\data\mysql_error.log`; `Setup.bat` prints that part when MySQL will not start. A MySQL that opens its port and then stops with no error in the log is the other usual cause (damaged data files): `Setup.bat` puts XAMPP's clean data folder (`<XAMPP>\mysql\backup`) in place of `<XAMPP>\mysql\data` and keeps the old folder next to it as `data-old-<date and time>`. It does that only when the old folder holds no databases of yours; otherwise it stops and lists the manual steps.
 - **`install.php`: "root account has no password"**: step 4 missed a `root` row, usually the `127.0.0.1` one.
 - **`install.php`: "Could not sign in as root"**: wrong password, MySQL is not running, or it is on another port (add the port after `install.php`).
 - **"Table '...' is marked as crashed" (for example `tables_priv`)**: MariaDB was not shut down cleanly. In the Shell run `mysqlcheck -u root -p --auto-repair --databases mysql`, then `install.php` again. If that is not enough: stop MySQL, run `aria_chk -r "<XAMPP>\mysql\data\mysql\tables_priv"` (or `myisamchk -r` if the table's files end in `.MYI`/`.MYD`), start MySQL, and run `install.php` again.
 - **Browser: "config.local.php is missing"**: step 6 did not finish.
 - **Browser: "The database is not available, or something went wrong"**: MySQL is stopped, or look at `<XAMPP>\php\logs\php_error_log` and `<XAMPP>\apache\logs\error.log` for the real message (the page never shows it on purpose).
-- **Account locked** (5 wrong passwords in a row, 15 minutes): wait, or as root run `UPDATE sc_accounts.users SET failed_attempts = 0, locked_until = NULL WHERE username = 'admin';`
+- **Account locked** (5 wrong passwords in a row, 15 minutes): wait, or the super admin presses **Unlock** on the Account page. If it is the `admin` account itself, as root run `UPDATE sc_accounts.users SET failed_attempts = 0, locked_until = NULL WHERE username = 'admin';`
 - **phpMyAdmin opens without a login form**: `auth_type` in step 5 did not save. **"Access denied for user 'root'"**: wrong password, or one `root` row still has the old one (repeat the two checks in step 4). **A message about `blowfish_secret`**: it is shorter than 32 characters. **A blank page**: a quote or semicolon was lost in `config.inc.php`; restore your backup copy. **"No connection could be made" / error 2002**: MySQL is not running.
 - **Deleting a product fails with a permission error on `movements`**: add `GRANT DELETE ON sc_inventory.movements TO 'sc_inventory_app'@'127.0.0.1';` to the end of `database/inventory.sql` and run `install.php` again.
 
@@ -118,21 +135,37 @@ In the `sc_inventory` MariaDB database; the tables are in `database/inventory.sq
 - A backup copy, encrypted and checksummed, is refreshed at most once an hour in `Documents\sc.INVENT backup.scinvent`. It is never read back by itself; restore it with **Load from file**.
 - Moving over from the older, file-based version: setup steps 1 and 10. The old hidden folder `%LOCALAPPDATA%\sc.INVENT\` is no longer used and can be deleted.
 
-## Manager (bottom of the sidebar, super admin only)
+## Sharing MySQL with other programs
+
+- What this app creates is its own: the databases `sc_inventory` and `sc_accounts`, and two accounts, `sc_inventory_app` and `sc_accounts_app`, that can reach only their own database. Nothing in another program's databases or accounts is read, changed or dropped, and `install.php` is safe to run again (the data stays).
+- Setup is free to change what this app made itself: its two databases and two accounts are updated, and the two accounts are recreated on every install. It holds back only where *another* program is involved: it never reads, changes or drops their databases or accounts, it asks before giving `root` a password on a server they share, it stops instead of building on a same-named database that is not this app's, and it leaves another program's use of the push port (8765) alone.
+- If a database named `sc_inventory` or `sc_accounts` already holds tables that are not this app's, `install.php` stops before changing anything instead of building on it.
+- What is shared is the server itself: `root` gets a password (step 4), and MySQL is set to listen on this PC only (`bind-address`, needs a restart). A program that signs in as `root` without a password, or from another computer, stops working until you give it the new password or undo the change. If `Setup.bat` finds other programs' databases it lists them and asks before its first change, and `Revert.bat` puts `root`, `my.ini` and phpMyAdmin back as they were.
+- A program that needs `root` with no password cannot share this server with the app. Give that program its own limited MySQL account instead, the way this app does: `CREATE USER` and `GRANT ... ON its_database.*`.
+
+## Database (Account page, super admin only)
 - **Save to file**: downloads the whole inventory as one `.scinvent` file.
 - **Load from file**: replaces the whole inventory in the database with a saved file (checked first; a damaged or edited file is refused) and refreshes the Documents backup.
 - **Delete inventory**: removes all products, history and categories from the database, and the Documents backup.
 
 A `.scinvent` file made this way loads on any copy of the app.
-The key and the backup timing are at the top of `core/Store.php`. Other roles do not see the Manager, and `manager.php` refuses them too.
+The key and the backup timing are at the top of `core/Store.php`. Other roles do not see this panel, and `manager.php` refuses them too.
 
 ## Signing in
 Every page and endpoint needs a signed-in account, and the inventory is not even read before that. If the accounts database cannot be read, nobody gets in. The page shows nothing from the inventory.
-- Accounts are in the `sc_accounts` database (`database/accounts.sql`): `users` and `roles`, with only a `password_hash` stored. The app signs in to MariaDB for this as `sc_accounts_app`, a different account that cannot touch the inventory; it can read accounts and update only `failed_attempts`, `locked_until` and `last_login_at`.
+- Accounts are in the `sc_accounts` database (`database/accounts.sql`): `users` and `roles`, with only a `password_hash` stored. The app signs in to MariaDB for this as `sc_accounts_app`, a different account that cannot touch the inventory; it can read, add (sign-up) and delete accounts, and update only `password_hash`, `role_id`, `banned`, `failed_attempts`, `locked_until` and `last_login_at`.
 - After 5 wrong passwords in a row an account is locked for 15 minutes (`MAX_FAILS` and `LOCK_MINUTES` in `core/Auth.php`). A wrong username, a wrong password and a locked account all look the same on the sign-in page.
 - Over the LAN, sign in on the `https://` address, since the password is sent as typed; over https the session cookie is also marked secure.
-- The super admin created by `install.php` is `admin` / `1234`, a placeholder. Replace it right away (setup step 8); until there is a page to change passwords, that is done by hand.
-- To add more roles or users for now, do it as root in the `sc_accounts` database; when a page for it exists, widen the grants in `database/accounts.sql` on purpose. If the users table is ever emptied, running `install.php` again adds `admin` back.
+- The super admin created by `install.php` is `admin` / `1234`, a placeholder. Replace it right away (setup step 8; `Setup.bat` asks for the new password for you).
+- **Sign up** (`signup.php`, linked from the sign-in page) makes a **viewer**: it can look at the dashboard, products, reports and history, and every button it can't use is hidden (the server refuses those requests too). The super admin gives more on the **Account** page: **stock clerk** (also records stock in/out) or **inventory manager** (also adds, edits and deletes products and uses the QR tools). The same panel resets a forgotten password, removes a lockout, **bans** an account (it cannot sign in and an open session ends; unbanning gives its role back) or deletes it. The super admin account itself can't be changed there.
+- **Access requests:** an account below inventory manager sees **Request more access** on its Account page: it picks a bigger role and may add a message. The request lands in the super admin's **Mailbox** (a red number on the account button in the sidebar shows how many are waiting), who can **Approve** (the role changes at once), **Deny**, or **Mute sender** (that account can't send more until **Unmute requests** under Accounts). **Turn requests off** hides the button for everyone. An account can send one request every 24 hours, and none while one is waiting; the 24 hours is `COOLDOWN_HOURS` at the top of `core/Requests.php`.
+- **Live updates:** changes show up on open pages without a reload. A role change redraws the page with the new buttons; a ban or a deleted account throws that person out to the sign-in page; the super admin's mail count (account button and tab title) and the Mailbox and Accounts panels refresh by themselves, and a sender's request panel follows the answer. A panel is not swapped while someone is typing in it or a popup is open; it updates a moment later.
+  - **How:** `ws-server.php`, a small WebSocket server written in PHP (nothing to install: it uses XAMPP's own PHP), keeps one connection per open page and sends it the word "changed" the moment the app changes something. The page then asks `poll.php` what changed, so what a person may see is still decided there, per account. The server listens on 127.0.0.1 only; Apache passes the page's `/ws` connection on to it (`.htaccess`), so nothing new is opened to the network and Windows Firewall stays quiet. Changes arrive in a fraction of a second.
+  - **Always running:** `Setup.bat` starts it, and the app starts it again by itself whenever a page finds it stopped (after a reboot, for instance, the first page that opens does it). No scheduled task or service is needed. `Revert.bat` stops it.
+  - **If it is not running** (or Apache cannot pass `/ws` on), nothing breaks: each page polls `poll.php` every 5 seconds (15 in a background tab) instead, and keeps trying the WebSocket. With the WebSocket connected the poll only backs it up, once a minute.
+  - **XAMPP:** `Setup.bat` switches on `proxy_module` and `proxy_wstunnel_module` in `httpd.conf` if they are off (backed up; `Revert.bat` restores it). By hand, that is two `LoadModule` lines. The port is 8765; if another program uses it, Setup leaves that program alone and the pages poll. To use another port, change `push` → `port` in `config.local.php` and the port in `.htaccess`, together.
+  - **Limits:** 150 open pages at once (Windows' `select()` copes with about 256 sockets); further pages poll. The server holds no data and never touches the database.
+- A new role is one line in `core/Auth.php` and one row in `database/accounts.sql`; then run `install.php` again. Running it again also adds `admin` back if the users table is ever emptied.
 
 ## QR codes
 The dashboard's **Create QR code** button makes a QR code for one product or for as many as you like, and you can save it as a PNG.

@@ -10,6 +10,7 @@ $add = [];    // add dialog values, kept if validation fails
 $addError = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    Auth::need(isset($_POST['delete_id']) || isset($_POST['add']) || !isset($_POST['quantity']) ? 'products' : 'stock');   // the same order as the branches below
     if (isset($_POST['delete_id'])) {
         $inventory->deleteProduct($_POST['delete_id']);
         redirect($self, 'Product deleted.');
@@ -86,17 +87,19 @@ include __DIR__ . '/includes/header.php';
             </label>
         </form>
     </div>
+    <?php if (Auth::can('stock') || Auth::can('products')): ?>
     <div class="actions">
-        <button type="button" class="btn btn-secondary" id="open-stock">Stock in/out</button>
-        <button type="button" class="btn" id="open-add">+ Add product</button>
+        <?php if (Auth::can('stock')): ?><button type="button" class="btn btn-secondary" id="open-stock">Stock in/out</button><?php endif; ?>
+        <?php if (Auth::can('products')): ?><button type="button" class="btn" id="open-add">+ Add product</button><?php endif; ?>
     </div>
+    <?php endif; ?>
 </div>
 
 <?php if (!$products): ?>
     <p class="empty">No products yet.</p>
 <?php endif; ?>
 
-<?php $editable = true; ?>
+<?php $editable = Auth::can('products'); ?>
 <div id="products">
     <?php if ($products): ?>
         <p class="empty" data-none hidden>No products match.</p>
@@ -121,6 +124,7 @@ include __DIR__ . '/includes/header.php';
     <?php endforeach; ?>
 </datalist>
 
+<?php if (Auth::can('products')): ?>
 <?php include __DIR__ . '/includes/add_dialog.php'; ?>
 <dialog id="product-dialog" class="form">
     <h2>Edit product</h2>
@@ -147,6 +151,8 @@ include __DIR__ . '/includes/header.php';
         <input type="hidden" name="delete_id">
     </form>
 </dialog>
+<?php endif; ?>
+<?php if (Auth::can('stock')): ?>
 <dialog id="stock-dialog" class="form" <?= $stockError || isset($_GET['stock']) ? 'data-open' : '' ?>>
     <h2>Stock in/out</h2>
     <?php if ($stockError): ?>
@@ -179,4 +185,5 @@ include __DIR__ . '/includes/header.php';
         </div>
     </form>
 </dialog>
+<?php endif; ?>
 <?php include __DIR__ . '/includes/footer.php'; ?>
